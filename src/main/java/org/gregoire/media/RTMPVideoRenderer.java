@@ -289,6 +289,8 @@ public class RTMPVideoRenderer {
 	/**
 	 * Builds a configuration video frame.
 	 * 
+         * C++ example http://pastebin.com/fTHENikp
+         *
 	 * @param timestamp
 	 * @return
 	 */
@@ -304,13 +306,13 @@ public class RTMPVideoRenderer {
 		avcConfig[cursor++] = (byte) 0; // composition time
 		avcConfig[cursor++] = (byte) 0; // composition time
 		// sps
-		avcConfig[cursor++] = (byte) 1; // version
+		avcConfig[cursor++] = (byte) 1; // configurationVersion
 		avcConfig[cursor++] = (byte) sps[1]; // profile
 		avcConfig[cursor++] = (byte) sps[2]; // profile compat
 		avcConfig[cursor++] = (byte) sps[3]; // level
 		// reserved bytes - adobe doesn't write these
-		avcConfig[cursor++] = (byte) 0x3; // 6 bits reserved (111111) + 2 bits nal size length - 1 (11)
-		avcConfig[cursor++] = (byte) 0x1; // 3 bits reserved (111) + 5 bits number of sps (00001)
+		avcConfig[cursor++] = (byte) 0xff; // 6 bits reserved (111111) + 2 bits nal size length - 1 (11), lengthSizeMinusOne
+		avcConfig[cursor++] = (byte) 0xe1; // 3 bits reserved (111) + 5 bits number of sps (00001), numOfSequenceParameterSets
 		// sps length
 		avcConfig[cursor++] = (byte) ((sps.length >> 8) & 0xff);
 		avcConfig[cursor++] = (byte) (sps.length & 0xff);
@@ -319,7 +321,7 @@ public class RTMPVideoRenderer {
 			avcConfig[cursor++] = sps[k];
 		}
 		// pps
-		avcConfig[cursor++] = 1; //version
+		avcConfig[cursor++] = 1; // numOfPictureParameterSets
 		// pps length - short to big endian
 		avcConfig[cursor++] = (byte) ((pps.length >> 8) & 0x000000ff);
 		avcConfig[cursor++] = (byte) (pps.length & 0x000000ff);
