@@ -147,6 +147,24 @@ public class RTMPVideoRenderer {
 		}
    		// we've parsed all the slices, now create the flv-ready packet
 		if (!frameSlices.isEmpty() && frameSlices.size() > 3) { // need more than just the lone sps
+			// check that AVC config information has been set up
+			if (videoConfig == null) {
+				if (sps != null && pps != null) {
+	    			// try to build the config
+	    			buildVideoConfigFrame((int) timestamp);
+	    			// if we have a config send it
+	    			if (videoConfig != null) {
+	    				log.debug("Sending avc config");
+	    				if (recorder != null) {
+	    					try {
+	    						recorder.process(videoConfig);
+	    					} catch (Exception e) {
+	    						log.warn("Exception duplicating data", e);
+	    					}
+	    				}
+	    			}
+				}
+			}			
        		log.debug("Creating video data frame");
        		VideoData video = buildVideoFrame((int) timestamp, frameSize);
        		if (video != null) {
@@ -167,11 +185,12 @@ public class RTMPVideoRenderer {
 	 *            The NALU stream
 	 * @param offset
 	 *            The point to search from
-	 * @return The point before the next 0001 marker
+	 * @return The point before the next marker
 	 */
 	public static int findFrameEnd(byte[] frame, int offset) {
 		for (int i = offset; i < frame.length - 3; i++) {
 			if (frame[i] == 0 && frame[i + 1] == 0 && frame[i + 2] == 0 && frame[i + 3] == 1) {
+				log.warn("00 00 00 01 found while looking for end of unit");
 				return i;
 			} else if (frame[i] == 0 && frame[i + 1] == 0 && frame[i + 2] == 1) {
 				return i;
@@ -216,7 +235,7 @@ public class RTMPVideoRenderer {
 				addVideoSlice(data, offset, size);
 				break;
 			default:
-				log.debug("Non-picture data");
+				log.warn("Non-picture data");
 		}
 	}
 
@@ -313,31 +332,11 @@ public class RTMPVideoRenderer {
 	 * @return
 	 */
 	private static VideoData buildVideoFrame(int timestamp, int frameSize) {
-		log.debug("buildVideoFrame");
-		// check that AVC config information has been set up
-		if (videoConfig == null) {
-			if (sps != null && pps != null) {
-    			// try to build the config
-    			buildVideoConfigFrame(timestamp);
-    			// if we have a config send it
-    			if (videoConfig != null) {
-    				log.debug("Sending avc config");
-    				if (recorder != null) {
-    					try {
-    						recorder.process(videoConfig.duplicate());
-    					} catch (Exception e) {
-    						log.warn("Exception duplicating data", e);
-    					}
-    				}
-    			}
-			} else {
-				return null;
-			}
-		}
+		log.debug("buildVideoFrame - slice count: {}", frameSlices.size());
 		// determine if the set of slices are of IDR type 
 		boolean isIdr = (frameSlices.getFirst()[4] & 0x1f) == 7; // (SPS will actual be the first slice, if its an IDR set)
 		// size the flv video data array
-		IoBuffer framedData = IoBuffer.allocate(frameSize + 5 + 1);
+		IoBuffer framedData = IoBuffer.allocate(frameSize + 5 + 1); // 5 bytes header and 1 byte trailer
 		framedData.setAutoExpand(true);
 		log.debug("Frame data initial size: {}", framedData.limit());
 		// write prefix bytes
