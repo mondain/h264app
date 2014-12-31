@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 
@@ -58,7 +57,7 @@ public class H264Main {
 		// start the renderer
 		RTMPVideoRenderer.start();
 		// positions of the NALU sequence marker
-		long[] positions = new long[418];
+		long[] positions = new long[418]; // i know the count for my test file
 		int p = 0;
 		for (int i = 0; i < h264dump.length - 4; i++) {
 			if (h264dump[i] == 0 && h264dump[i + 1] == 0 && h264dump[i + 2] == 0 && h264dump[i + 3] == 1) {

@@ -146,7 +146,7 @@ public class RTMPVideoRenderer {
 			}
 		}
    		// we've parsed all the slices, now create the flv-ready packet
-		if (!frameSlices.isEmpty()) {
+		if (!frameSlices.isEmpty() && frameSlices.size() > 3) { // need more than just the lone sps
        		log.debug("Creating video data frame");
        		VideoData video = buildVideoFrame((int) timestamp, frameSize);
        		if (video != null) {
@@ -194,19 +194,26 @@ public class RTMPVideoRenderer {
 		final int type = readNalHeader((byte) data[offset]);
 		log.debug("nal type : {}", type);
 		switch (type) {
-			case 5: // IDR
-				// add sps and pps at the front of the idr
-				
 			case 1: // Coded Slice
+			case 5: // IDR
+				// add video frame slice
 				addVideoSlice(data, offset, size);
 				break;
 			case 7: // SPS - 67
 				sps = new byte[size];
 				System.arraycopy(data, offset, sps, 0, sps.length);
+				// add the sps as a slice
+				addVideoSlice(data, offset, size);			
 				break;
 			case 8: // PPS - 68
 				pps = new byte[size];
 				System.arraycopy(data, offset, pps, 0, pps.length);
+				// add the pps as a slice
+				addVideoSlice(data, offset, size);
+				break;
+			case 6: // SEI
+				// add the sei as a slice
+				addVideoSlice(data, offset, size);
 				break;
 			default:
 				log.debug("Non-picture data");
@@ -229,7 +236,7 @@ public class RTMPVideoRenderer {
 		data[2] = (byte) (size >> 8);
 		data[3] = (byte) size;
 		// copy in encoded bytes
-		System.arraycopy(nal, offset, data, 4, size - 1);
+		System.arraycopy(nal, offset, data, 4, size);
 		// add the framed data
 		frameSlices.add(data);
 	}
@@ -327,12 +334,14 @@ public class RTMPVideoRenderer {
 				return null;
 			}
 		}
+		// determine if the set of slices are of IDR type 
+		boolean isIdr = (frameSlices.getFirst()[4] & 0x1f) == 7; // (SPS will actual be the first slice, if its an IDR set)
 		// size the flv video data array
 		IoBuffer framedData = IoBuffer.allocate(frameSize + 5 + 1);
 		framedData.setAutoExpand(true);
 		log.debug("Frame data initial size: {}", framedData.limit());
 		// write prefix bytes
-		framedData.put((byte) ((frameSlices.getFirst()[5] & 0x1f) == 5 ? 0x17 : 0x27)); // 0x10 - key frame; 0x07 - H264_CODEC_ID
+		framedData.put((byte) (isIdr ? 0x17 : 0x27)); // 0x10 - key frame; 0x07 - H264_CODEC_ID
 		framedData.put((byte) 0x01); // 0: AVC sequence header; 1: AVC NALU; 2: AVC end of sequence
 		// presentation off set
 		framedData.put((byte) 0);
