@@ -3,6 +3,7 @@ package org.gregoire.media;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.LinkedList;
 
 import javax.media.Buffer;
 
@@ -25,33 +26,33 @@ public class RTMPVideoRenderer {
 	public final static int BUFFER_PROCESSED_FAILED = -1;
 
 	public final static int BUFFER_PROCESSED_OK = 0;
-	
-	private static String[] names = {"Undefined", "Coded Slice", "Partition A", "Partition B", "Partition C", "IDR", "SEI", "SPS", "PPS", "AUD","","","","","","","","","","","","","","","","","","","FUA"};
-		
+
+	private static String[] names = { "Undefined", "Coded Slice", "Partition A", "Partition B", "Partition C", "IDR", "SEI", "SPS", "PPS", "AUD", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "FUA" };
+
 	private static VideoData videoConfig;
 
-	private static boolean configSent;
-	
 	private static long startTs;
-	
+
 	private static byte[] sps, pps;
-	
+
 	private static FLVRecorder recorder = new FLVRecorder();
 	
+	private static LinkedList<byte[]> frameSlices = new LinkedList<byte[]>();
+
 	public static void start() {
 		log.debug("start");
-		startTs = System.currentTimeMillis();		
+		startTs = System.currentTimeMillis();
 		if (recorder != null) {
 			try {
-	            recorder.start();
-	        } catch (IOException e) {
-	        	log.warn("Exception starting recorder", e);
-	        }
+				recorder.start();
+			} catch (IOException e) {
+				log.warn("Exception starting recorder", e);
+			}
 		}
 	}
-	
+
 	public static void stop() {
-		log.debug("stop");		
+		log.debug("stop");
 		if (recorder != null) {
 			recorder.stop();
 		}
@@ -60,29 +61,29 @@ public class RTMPVideoRenderer {
 	private static int process(Buffer outBuffer) {
 		int ret = BUFFER_PROCESSED_OK;
 		try {
-    		if (log.isDebugEnabled()) {
-    			log.debug("process - buffer - ts: {} format: {} length: {}", outBuffer.getTimeStamp(), outBuffer.getFormat(), outBuffer.getLength());		
-    		}
-    		// pull out the bytes in to a properly sized array
-    		int encLength = outBuffer.getLength();
-    		log.debug("Encoded video - offset: {} length: {}", outBuffer.getOffset(), encLength);
-    		byte[] data = new byte[encLength];
-    		System.arraycopy((byte[]) outBuffer.getData(), 0, data, 0, encLength);
-    		// check for decoder OK
-    		if (ret == BUFFER_PROCESSED_OK) {
-    			// http://www.cs.columbia.edu/~hgs/rtp/faq.html#timestamp-computed
-    			long timestamp = System.currentTimeMillis() - startTs;
-    			log.debug("Video timestamp: {} ms", timestamp);
-        		// get the NALU
-        		int nalsProcessed = processNals(data, timestamp);
-        		log.debug("NALU processed: {}", nalsProcessed);
-    		}
-    	} catch (Throwable t) {
-    		log.error("Exception in video render", t);
-    	}
+			if (log.isDebugEnabled()) {
+				log.debug("process - buffer - ts: {} format: {} length: {}", outBuffer.getTimeStamp(), outBuffer.getFormat(), outBuffer.getLength());
+			}
+			// pull out the bytes in to a properly sized array
+			int encLength = outBuffer.getLength();
+			log.debug("Encoded video - offset: {} length: {}", outBuffer.getOffset(), encLength);
+			byte[] data = new byte[encLength];
+			System.arraycopy((byte[]) outBuffer.getData(), 0, data, 0, encLength);
+			// check for decoder OK
+			if (ret == BUFFER_PROCESSED_OK) {
+				// http://www.cs.columbia.edu/~hgs/rtp/faq.html#timestamp-computed
+				long timestamp = System.currentTimeMillis() - startTs;
+				log.debug("Video timestamp: {} ms", timestamp);
+				// get the NALU
+				int nalsProcessed = processNals(data, timestamp);
+				log.debug("NALU processed: {}", nalsProcessed);
+			}
+		} catch (Throwable t) {
+			log.error("Exception in video render", t);
+		}
 		return ret;
 	}
-	
+
 	/**
 	 * Returns nal header type.
 	 * 
@@ -95,7 +96,7 @@ public class RTMPVideoRenderer {
 		log.debug(names[nalType]);
 		return nalType;
 	}
-	
+
 	/**
 	 * Returns count of NALU's processed for given byte array.
 	 * 
@@ -105,84 +106,81 @@ public class RTMPVideoRenderer {
 	 */
 	public static int processNals(byte[] frame, long timestamp) {
 		int count = 0;
-		
+		int frameSize = 0;
 		for (int i = 0; i < frame.length - 4; i++) {
-			if (frame[i] == 0) {
-				if (frame[i + 1] == 0) {
-					if (frame[i + 2] == 0) {
-						if (frame[i + 3] == 1) {
-							log.debug("Found marker ");
-							i += 4; // cursor past 0001
-							// look for next 8_bit_zero marker
-							int size = findFrameEnd(frame, i+4);
-							if (size == -1) {
-								// from i to end of segment
-								size = frame.length - i;
-							} else {
-								// size is from start of segment to next 8_bit_zero marker
-								size = size - i;
-							}
-							// process an individual nal
-							processNal(frame, i, size, (int) timestamp);
-							timestamp+=33;
-							count++;
-							// cue next '0'001 point 
-							i += size - 1;
-						} else {
-							log.debug("Expected marker {}, {}" , frame[i+3], frame[i+4]);
-						}
-					} else {
-						if (frame[i + 2] == 1) {
-							log.debug("Marker at 3");
-							i += 3; // cursor past 0001
-							int size = findFrameEnd(frame, i);
-							if (size == -1) {
-								// from i to end of segment
-								size = frame.length - i;
-							} else {
-								// size is from start of segment to next 8_bit_zero marker
-								size = size - i;
-							}
-							// process an individual nal
-							processNal(frame, i, size, (int) timestamp);
-							timestamp+=33;
-							count++;
-							// cue next '0'001 point 
-							i += size - 1;
-							
-						}
-					}
+			if (frame[i] == 0 && frame[i + 1] == 0 && frame[i + 2] == 0 && frame[i + 3] == 1) {
+				log.debug("Found start marker");
+				i += 4; // cursor past 0001
+				// look for next 8_bit_zero marker
+				int size = findFrameEnd(frame, i);
+				if (size == -1) {
+					// from i to end of segment
+					size = frame.length - i;
+				} else {
+					// size is from start of segment to next 8_bit_zero marker
+					size = size - i;
 				}
+				// process an individual nal
+				processNal(frame, i, size, (int) timestamp);
+				count++;
+				frameSize += (size + 4);
+				// cue next point 
+				i += size - 1;
+			} else if (frame[i] == 0 && frame[i + 1] == 0 && frame[i + 2] == 1) {
+				log.debug("Found slice marker");
+				i += 3; // cursor past 001
+				int size = findFrameEnd(frame, i);
+				if (size == -1) {
+					// from i to end of segment
+					size = frame.length - i;
+				} else {
+					// size is from start of segment to next 8_bit_zero marker
+					size = size - i;
+				}
+				// process an individual nal
+				processNal(frame, i, size, (int) timestamp);
+				count++;
+				frameSize += (size + 4);
+				// cue next point 
+				i += size - 1;
 			}
+		}
+   		// we've parsed all the slices, now create the flv-ready packet
+		if (!frameSlices.isEmpty()) {
+       		log.debug("Creating video data frame");
+       		VideoData video = buildVideoFrame((int) timestamp, frameSize);
+       		if (video != null) {
+           		if (recorder != null) {
+           			recorder.process(video);
+           		}		
+       		}
+       		// clean up
+       		frameSlices.clear();
 		}
 		return count;
 	}
-	
+
 	/**
 	 * Returns point of '0'001' marker or -1.
 	 * 
-	 * @param frame The NALU stream
-	 * @param offset The point to search from
+	 * @param frame
+	 *            The NALU stream
+	 * @param offset
+	 *            The point to search from
 	 * @return The point before the next 0001 marker
 	 */
-	public static int findFrameEnd(byte[] frame, int offset) {		
+	public static int findFrameEnd(byte[] frame, int offset) {
 		for (int i = offset; i < frame.length - 3; i++) {
-			if (frame[i] == 0) {
-				if (frame[i + 1] == 0) {
-					if (frame[i + 2] == 0) {
-						if (frame[i + 3] == 1) {
-							return i;
-						}
-					}else if (frame[i + 2] == 1){
-						return i;
-					}
-				}
+			if (frame[i] == 0 && frame[i + 1] == 0 && frame[i + 2] == 0 && frame[i + 3] == 1) {
+				return i;
+			} else if (frame[i] == 0 && frame[i + 1] == 0 && frame[i + 2] == 1) {
+				return i;
 			}
 		}
 		log.debug("Frame end not found");
 		return -1;
-	}	
-	
+	}
+
 	/**
 	 * Processes an individual NALU.
 	 * 
@@ -193,104 +191,54 @@ public class RTMPVideoRenderer {
 	 */
 	private static void processNal(byte[] data, int offset, int size, int timestamp) {
 		log.debug("processNal - offset: {} size: {} ts: {}", offset, size, timestamp);
-		VideoData video;
 		final int type = readNalHeader((byte) data[offset]);
 		log.debug("nal type : {}", type);
-		switch(type) {
+		switch (type) {
 			case 5: // IDR
-				// check that AVC config information has been set up
-				if (videoConfig == null) {
-					// if we have sps and pps, build the config
-					if (sps != null && pps != null) {
-						// try to build the config
-						buildVideoConfigFrame(timestamp);
-						// if we have a config send it
-						if (videoConfig != null) {
-							log.debug("Sending avc config");
-							if (recorder != null) {
-								try {
-	                                recorder.process(videoConfig.duplicate());
-                                } catch (Exception e) {
-                                	log.warn("Exception duplicating data", e);
-                                }
-							}
-							configSent = true;
-						}
-					} else {
-						log.debug("Configuration data not yet available to build config");
-						return;
-					} 
-				}
-				if (!configSent) {
-					return;
-				}
-	    		log.debug("Sending IDR frame");
-	    		video = buildVideoFrame(data, offset, size, timestamp);
-				if (recorder != null) {
-					try {
-                        recorder.process(video.duplicate());
-                    } catch (Exception e) {
-                    	log.warn("Exception duplicating data", e);
-                    }
-				}	
-				break;
+				// add sps and pps at the front of the idr
+				
 			case 1: // Coded Slice
-				// check that AVC config information has been set up
-				if (videoConfig == null) {
-					// if we have sps and pps, build the config
-					if (sps != null && pps != null) {
-						// try to build the config
-						buildVideoConfigFrame(timestamp);
-						// if we have a config send it
-						if (videoConfig != null) {
-							log.debug("Sending avc config");
-							if (recorder != null) {
-								try {
-	                                recorder.process(videoConfig.duplicate());
-                                } catch (Exception e) {
-                                	log.warn("Exception duplicating data", e);
-                                }
-							}
-							configSent = true;
-						}
-					} else {
-						log.debug("Configuration data not yet available to build config");
-						return;
-					} 
-				}
-				if (!configSent) {
-					return;
-				}
-	    		log.debug("Sending slice frame");
-	    		video = buildVideoFrame(data, offset, size, timestamp);
-				if (recorder != null) {
-					try {
-                        recorder.process(video.duplicate());
-                    } catch (Exception e) {
-                    	log.warn("Exception duplicating data", e);
-                    }
-				}
+				addVideoSlice(data, offset, size);
 				break;
 			case 7: // SPS - 67
-				log.debug("SPS data");
 				sps = new byte[size];
 				System.arraycopy(data, offset, sps, 0, sps.length);
 				break;
 			case 8: // PPS - 68
-				log.debug("PPS data");
 				pps = new byte[size];
 				System.arraycopy(data, offset, pps, 0, pps.length);
 				break;
 			default:
 				log.debug("Non-picture data");
-		}	
-    }
+		}
+	}
 
+	/**
+	 * Adds a slice of video data and its size. [size (4 bytes)][video data (size bytes)]
+	 * 
+	 * @param nal
+	 * @param offset
+	 * @param size
+	 */
+	private static void addVideoSlice(byte[] nal, int offset, int size) {
+		log.debug("addVideoSlice");
+		byte[] data = new byte[size + 4];
+		// size
+		data[0] = (byte) (size >> 24);
+		data[1] = (byte) (size >> 16);
+		data[2] = (byte) (size >> 8);
+		data[3] = (byte) size;
+		// copy in encoded bytes
+		System.arraycopy(nal, offset, data, 4, size - 1);
+		// add the framed data
+		frameSlices.add(data);
+	}
+	
 	/**
 	 * Builds a configuration video frame.
 	 * 
-         * C++ example http://pastebin.com/fTHENikp
-         *
+	 * C++ example http://pastebin.com/fTHENikp
+	 *
 	 * @param timestamp
 	 * @return
 	 */
@@ -335,15 +283,15 @@ public class RTMPVideoRenderer {
 		}
 		videoConfig = new VideoData(IoBuffer.wrap(avcConfig));
 		videoConfig.setHeader(new Header());
-		videoConfig.getHeader().setTimer((int) timestamp);	
+		videoConfig.getHeader().setTimer((int) timestamp);
 		videoConfig.setTimestamp((int) timestamp);
 		// testing
 		if (log.isDebugEnabled()) {
-    		AvcConfigBox avcC = new AvcConfigBox(ByteBuffer.wrap(avcConfig), true);	
-    		log.debug("Box: {}", avcC);
+			AvcConfigBox avcC = new AvcConfigBox(ByteBuffer.wrap(avcConfig), true);
+			log.debug("Box: {}", avcC);
 		}
 	}
-	
+
 	/**
 	 * Builds a video frame (non-config).
 	 * 
@@ -353,36 +301,58 @@ public class RTMPVideoRenderer {
 	 *  0x17 0x01  0x0 0x0 0x0             0x00 0x00 0x00 0x02      0x0916 bytes of data
 	 * </pre>
 	 * 
-	 * @param nal
-	 * @param offset
-	 * @param size
 	 * @param timestamp
+	 * @param frameSize
 	 * @return
 	 */
-	private static VideoData buildVideoFrame(byte[] nal, int offset, int size, int timestamp) {
+	private static VideoData buildVideoFrame(int timestamp, int frameSize) {
 		log.debug("buildVideoFrame");
-		byte[] framedData = new byte[size + 9];
+		// check that AVC config information has been set up
+		if (videoConfig == null) {
+			if (sps != null && pps != null) {
+    			// try to build the config
+    			buildVideoConfigFrame(timestamp);
+    			// if we have a config send it
+    			if (videoConfig != null) {
+    				log.debug("Sending avc config");
+    				if (recorder != null) {
+    					try {
+    						recorder.process(videoConfig.duplicate());
+    					} catch (Exception e) {
+    						log.warn("Exception duplicating data", e);
+    					}
+    				}
+    			}
+			} else {
+				return null;
+			}
+		}
+		// size the flv video data array
+		IoBuffer framedData = IoBuffer.allocate(frameSize + 5 + 1);
+		framedData.setAutoExpand(true);
+		log.debug("Frame data initial size: {}", framedData.limit());
 		// write prefix bytes
-		framedData[0] = (byte) ((nal[offset] & 0x1f) == 5 ? 0x17 : 0x27); // 0x10 - key frame; 0x07 - H264_CODEC_ID
-		framedData[1] = (byte) 0x01; // 0: AVC sequence header; 1: AVC NALU; 2: AVC end of sequence
+		framedData.put((byte) ((frameSlices.getFirst()[5] & 0x1f) == 5 ? 0x17 : 0x27)); // 0x10 - key frame; 0x07 - H264_CODEC_ID
+		framedData.put((byte) 0x01); // 0: AVC sequence header; 1: AVC NALU; 2: AVC end of sequence
 		// presentation off set
-		framedData[2] = (byte) 0;
-		framedData[3] = (byte) 0;
-		framedData[4] = (byte) 0;
-		// nal size
-		framedData[5] = (byte) (size >> 24);
-		framedData[6] = (byte) (size >> 16);
-		framedData[7] = (byte) (size >> 8);
-		framedData[8] = (byte) size;
+		framedData.put((byte) 0);
+		framedData.put((byte) 0);
+		framedData.put((byte) 0);
 		// copy in encoded bytes
-		System.arraycopy(nal, offset, framedData, 9, size - 1);
+		for (byte[] frame : frameSlices) {
+			framedData.put(frame);
+		}
 		// write end byte
-		framedData[framedData.length - 1] = (byte) 0;
-		VideoData video = new VideoData(IoBuffer.wrap(framedData));
+		framedData.put((byte) 0);
+		// flip it
+		framedData.flip();
+		log.debug("Frame data final size: {}", framedData.limit());
+		// create the video data obj
+		VideoData video = new VideoData(framedData);
 		video.setHeader(new Header());
-		video.getHeader().setTimer((int) timestamp);	
+		video.getHeader().setTimer((int) timestamp);
 		video.setTimestamp((int) timestamp);
 		return video;
-	}
-
+	}	
+	
 }
