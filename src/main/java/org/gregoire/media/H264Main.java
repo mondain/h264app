@@ -3,7 +3,6 @@ package org.gregoire.media;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
@@ -13,7 +12,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 
 import org.mp4parser.Container;
 import org.mp4parser.muxer.FileDataSourceImpl;
@@ -33,16 +31,18 @@ public class H264Main {
     /**
      * Creates an MP4 file out of encoded h.264 bytes.
      * 
+     * @param path file path
      * @throws IOException
      */
-    public static void makeMP4() throws IOException {
-        H264TrackImpl h264Track = new H264TrackImpl(new FileDataSourceImpl("dump.h264"));
+    public static void makeMP4(Path path) throws IOException {
+        String abs = path.toAbsolutePath().toString();
+        H264TrackImpl h264Track = new H264TrackImpl(new FileDataSourceImpl(abs));
         //AACTrackImpl aacTrack = new AACTrackImpl(new FileInputStream("/home/sannies2/Downloads/lv.aac").getChannel());
         Movie m = new Movie();
         m.addTrack(h264Track);
         //m.addTrack(aacTrack);
         Container out = new DefaultMp4Builder().build(m);
-        FileOutputStream fos = new FileOutputStream(new File("h264_output.mp4"));
+        FileOutputStream fos = new FileOutputStream(abs.replace(".h264", ".mp4"));
         FileChannel fc = fos.getChannel();
         out.writeContainer(fc);
         fos.close();
@@ -51,25 +51,31 @@ public class H264Main {
     public static void main(String[] args) throws IOException {
         String filePath = args.length > 0 ? args[0] : "dump.h264";
         Path path = Paths.get(filePath);
-        long length = path.toFile().length();
         List<Long> posList = new ArrayList<>();
         SeekableByteChannel channel = null;
         try {
             channel = Files.newByteChannel(path);
+            @SuppressWarnings("unused")
             int read = -1;
             int nalScore = 0;
             ByteBuffer dst = ByteBuffer.allocateDirect(1);
             while ((read = channel.read(dst)) > 0) {
                 // flip for reading
                 dst.flip();
-                log.trace("Read: {} positions - channel: {} buffer: {}", read, channel.position(), dst.position());
+                //log.trace("Read: {} positions - channel: {} buffer: {}", read, channel.position(), dst.position());
                 switch (nalScore) {
                     case 0: // we're starting a new detection
                     case 1: // we've already found the first byte
                     case 2: // we're already found the second byte
-                        if (dst.get() == 0) {
+                        byte b = dst.get();
+                        if (b == 0) {
                             // found a byte of the nal start code
                             nalScore += 1;
+                        } else if (nalScore == 2 && b == 1) {
+                            // record the index of the 00 00 01 delimiter
+                            posList.add(channel.position() - 3);
+                            // reset the score
+                            nalScore = 0;
                         } else {
                             // reset the score
                             nalScore = 0;
@@ -124,7 +130,7 @@ public class H264Main {
             log.error("", e);
         } finally {
             // create the mp4 for verification that our dump file is ok
-            makeMP4();
+            makeMP4(path);
         }
     }
 
