@@ -5,9 +5,8 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.LinkedList;
 
-import javax.media.Buffer;
-
 import org.apache.mina.core.buffer.IoBuffer;
+import org.jcodec.codecs.h264.mp4.AvcCBox;
 import org.red5.server.net.rtmp.event.VideoData;
 import org.red5.server.net.rtmp.message.Header;
 import org.slf4j.Logger;
@@ -58,6 +57,7 @@ public class RTMPVideoRenderer {
 		}
 	}
 
+	/*
 	private static int process(Buffer outBuffer) {
 		int ret = BUFFER_PROCESSED_OK;
 		try {
@@ -83,6 +83,7 @@ public class RTMPVideoRenderer {
 		}
 		return ret;
 	}
+	*/
 
 	/**
 	 * Returns nal header type.
@@ -313,7 +314,7 @@ public class RTMPVideoRenderer {
 		videoConfig.setTimestamp((int) timestamp);
 		// testing
 		if (log.isDebugEnabled()) {
-			AvcConfigBox avcC = new AvcConfigBox(ByteBuffer.wrap(avcConfig), true);
+		    AvcCBox avcC = AvcCBox.parseAvcCBox(ByteBuffer.wrap(avcConfig));
 			log.debug("Box: {}", avcC);
 		}
 	}

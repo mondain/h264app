@@ -6,7 +6,7 @@
     <name>h264app</name>
     <description>H264 and FLV living in harmony</description>
     <groupId>org.gregoire</groupId>
-    <version>0.0.2-SNAPSHOT</version>
+    <version>0.0.3-SNAPSHOT</version>
     <url>https://github.com/mondain/h264app</url>
     <inceptionYear>2014</inceptionYear>
     <organization>
@@ -45,23 +45,18 @@
         <skipTests>true</skipTests>
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
-        <red5-io.version>1.0.4-RELEASE</red5-io.version>
-        <red5-server-common.version>1.0.4-RELEASE</red5-server-common.version>
-        <mina.version>2.0.8</mina.version>
-        <slf4j.version>1.7.9</slf4j.version>
-        <logback.version>1.1.2</logback.version>
-        <mp4parser.version>1.9.34</mp4parser.version>
+        <red5-io.version>1.1.1</red5-io.version>
+        <red5-server-common.version>1.1.1</red5-server-common.version>
+        <mina.version>2.0.21</mina.version>
+        <slf4j.version>1.7.25</slf4j.version>
+        <logback.version>1.2.3</logback.version>
+        <jcodec.version>0.2.5</jcodec.version>
     </properties>
     <build>
         <plugins>
             <plugin>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.1</version>
-                <configuration>
-                    <source>1.6</source>
-                    <target>1.7</target>
-                    <fork>true</fork>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.felix</groupId>
@@ -130,15 +125,10 @@
             </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.mp4parser</groupId>
-            <artifactId>isoparser</artifactId>
-            <version>${mp4parser.version}</version>
-        </dependency>   
-        <dependency>
-            <groupId>org.mp4parser</groupId>
-            <artifactId>muxer</artifactId>
-            <version>${mp4parser.version}</version>
-        </dependency>  
+			<groupId>org.jcodec</groupId>
+			<artifactId>jcodec</artifactId>
+			<version>${jcodec.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.mina</groupId>
             <artifactId>mina-core</artifactId>
@@ -150,25 +140,14 @@
             <version>2.5.0</version>
         </dependency>
         <dependency>
-            <groupId>org.jitsi</groupId>
-            <artifactId>libjitsi</artifactId>
-            <version>3.0</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/lib/libjitsi-3.0.jar</systemPath>
+        	<groupId>org.bouncycastle</groupId>
+  			<artifactId>bcprov-jdk15on</artifactId>
+  			<version>1.62</version>
         </dependency>
         <dependency>
-            <groupId>net.sf.fmj</groupId>
-            <artifactId>fmj</artifactId>
-            <version>r48</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/lib/fmj-r48.jar</systemPath>
-        </dependency>
-        <dependency>
-            <groupId>org.jcodec</groupId>
-            <artifactId>jcodec</artifactId>
-            <version>0.1.8</version>
-            <scope>system</scope>
-            <systemPath>${basedir}/lib/jcodec-0.1.8.jar</systemPath>
+        	<groupId>org.apache.commons</groupId>
+		  	<artifactId>commons-lang3</artifactId>
+		  	<version>3.9</version>
         </dependency>
     </dependencies>
 </project>
