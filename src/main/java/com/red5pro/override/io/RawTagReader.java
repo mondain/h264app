@@ -10,14 +10,13 @@ import java.nio.file.StandardOpenOption;
 
 import org.apache.mina.core.buffer.IoBuffer;
 import org.bouncycastle.util.encoders.Hex;
+import org.gregoire.media.rtmp.RTMPPrefix;
 import org.red5.io.IStreamableFile;
 import org.red5.io.ITag;
 import org.red5.io.ITagReader;
 import org.red5.server.stream.consumer.ImmutableTag;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.red5pro.media.renderer.rtmp.RTMPRenderer;
 
 /**
  * Reads ITags from a raw dat file.
@@ -163,7 +162,8 @@ public class RawTagReader implements ITagReader {
                         hasVideo = true;
                         log.debug("Body: {}", Hex.toHexString(body.array(), 0, body.array().length));
                         // 17 01 should be IDR/CS but we'll need to pull any SPS/PPS off the front
-                        if (body.get() == 0x17 && body.get() == 1) {
+                        byte first = body.get();
+                        if ((first == 0x17 || first == 0x27) && body.get() == 1) {
                             // skip next 3 bytes 0,0,0
                             body.get();
                             body.get();
@@ -188,14 +188,14 @@ public class RawTagReader implements ITagReader {
                                 IoBuffer nalu = IoBuffer.allocate(frameSize + 4 + 5);
                                 switch (nalType) {
                                     case 1: // CodedSlice
-                                        nalu.put(RTMPRenderer.H264_INTRAFRAME_PREFIX);
+                                        nalu.put(RTMPPrefix.H264_INTRAFRAME_PREFIX);
                                         nalu.putInt(1);
                                         nalu.put(data);
                                         nalu.flip();
                                         tag = ImmutableTag.build(dataType, timestamp, nalu);
                                         break;
                                     case 5: // IDR
-                                        nalu.put(RTMPRenderer.H264_KEYFRAME_PREFIX);
+                                        nalu.put(RTMPPrefix.H264_KEYFRAME_PREFIX);
                                         nalu.putInt(1);
                                         nalu.put(data);
                                         nalu.flip();

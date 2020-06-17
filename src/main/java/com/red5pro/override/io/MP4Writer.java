@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.mina.core.buffer.IoBuffer;
 import org.bouncycastle.util.encoders.Hex;
+import org.gregoire.media.aac.AACCodec;
 import org.jcodec.codecs.h264.H264Utils;
 import org.jcodec.codecs.h264.decode.SliceHeaderReader;
 import org.jcodec.codecs.h264.io.model.NALUnit;
@@ -57,7 +58,6 @@ import org.red5.media.processor.IPostProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.red5pro.media.codec.AACCodec;
 import com.red5pro.override.io.mp4.MP4MuxerTrack;
 import com.red5pro.util.ParsableBitArray;
 
