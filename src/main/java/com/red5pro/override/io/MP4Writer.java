@@ -318,7 +318,7 @@ public class MP4Writer implements ITagWriter {
 
     @Override
     public boolean writeTag(ITag tag) throws IOException {
-        log.debug("writeTag: {}", tag);
+        //log.trace("writeTag: {}", tag);
         // skip tags with no data
         int bodySize = tag.getBodySize();
         //if (isTrace) {
@@ -476,15 +476,66 @@ public class MP4Writer implements ITagWriter {
                                 log.debug("Rejecting AVC data since config has not yet been written");
                                 return false;
                             } else {
-                                // create a byte buffer from the tagbody iobuffer
-                                ByteBuffer nalu = ByteBuffer.wrap(Arrays.copyOfRange(tagBody.array(), 5, tagBody.remaining() - 5));
+                                // create a byte buffer from the tagbody iobuffer (assumed to contain 1..n nalu)
+                                ByteBuffer nalus = ByteBuffer.wrap(Arrays.copyOfRange(tagBody.array(), 5, tagBody.remaining() - 5));
                                 if (isTrace) {
                                     // annex-b nalu
-                                    log.trace("NALU body: {}", Hex.toHexString(nalu.array(), 0, Math.max(32, nalu.array().length / 3)));
+                                    log.trace("NALU body snip: {}", Hex.toHexString(nalus.array(), 0, Math.max(32, nalus.array().length / 3)));
+                                    nalus.mark();
+                                    log.warn("Check for Annex-b aaa: {}", nalus.getInt());
+                                    // reset for read
+                                    nalus.reset();
                                 }
                                 // need at least the size of the frame, so 4 bytes minimum
-                                while (nalu.remaining() >= 4) {
-                                    // advance past annex-b prefix
+                                while (nalus.remaining() >= 4) {
+                                    // put the data into a bb
+                                    ByteBuffer nalu;
+                                    // mark so we can reset back to the expected position
+                                    nalus.mark();
+                                    // before advancing past annex-b prefix, ensure its not a size
+                                    int frameSize = nalus.getInt();
+                                    if (isDebug) {
+                                        log.debug("Frame size: {}", frameSize);
+                                    }
+                                    // no nalu lengths are less than 2
+                                    if (frameSize > 1) {
+                                        log.warn("Not Annex-b, read nalu size. Body position: {}", nalus.position());
+                                        // reset for read of data length
+                                        //nalus.reset();
+                                        // read the size
+                                        //frameSize = (nalus.get() & 0xFF);
+                                        //frameSize = frameSize << 8 | (nalus.get() & 0xFF);
+                                        //frameSize = frameSize << 8 | (nalus.get() & 0xFF);
+                                        //frameSize = frameSize << 8 | (nalus.get() & 0xFF);
+                                        //log.debug("Frame size (parsed): {}", frameSize);
+                                        // XXX an error seemingly exists or existed that caused the frame length to be off by 7 bytes
+                                        int diff = frameSize - nalus.remaining();
+                                        if (diff > 7) {
+                                            log.warn("Bad h264 frame...frameSize {} available: {}", frameSize, nalus.remaining());
+                                            return false;
+                                        } else {
+                                            // resize based on whats available
+                                            data = new byte[diff <= 0 ? frameSize : frameSize - diff];
+                                        }
+                                        // pull data out
+                                        nalus.get(data);
+                                        if (isDebug) {
+                                            log.debug("Grabbed nalu out {}, body position: {}", data.length, nalus.position());
+                                        }
+                                        // size up single nalu
+                                        nalu = ByteBuffer.allocate(frameSize + 4);
+                                        nalu.putInt(1); // annex-b 00,00,00,01
+                                        nalu.put(data);
+                                        nalu.flip();
+                                    } else {
+                                        // reset back
+                                        nalus.reset();
+                                        // slice out the nalu
+                                        nalu = nalus.slice();
+                                        // advance the nalus beyond our sliced out nalu
+                                        nalus.position(nalu.limit());
+                                    }
+                                    // jump past prefix
                                     nalu.position(4);
                                     // read the nalu
                                     NALUnit nu = NALUnit.read(nalu);

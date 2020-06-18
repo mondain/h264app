@@ -161,7 +161,7 @@ public class RawTagReader implements ITagReader {
                         // update hasVideo flag
                         hasVideo = true;
                         log.debug("Body: {}", Hex.toHexString(body.array(), 0, body.array().length));
-                        // 17 01 should be IDR/CS but we'll need to pull any SPS/PPS off the front
+                        // 17 01 IDR or 27 01 CS ensure we pull any SPS/PPS off the front
                         byte first = body.get();
                         if ((first == 0x17 || first == 0x27) && body.get() == 1) {
                             // skip next 3 bytes 0,0,0
@@ -169,15 +169,22 @@ public class RawTagReader implements ITagReader {
                             body.get();
                             body.get();
                             do {
+                                log.debug("Remaining: {}", body.remaining());
                                 // H264 data, size prepended
+                                int frameSize = body.getInt();
+                                /*
                                 int frameSize = (body.get() & 0xFF);
                                 frameSize = frameSize << 8 | (body.get() & 0xFF);
                                 frameSize = frameSize << 8 | (body.get() & 0xFF);
                                 frameSize = frameSize << 8 | (body.get() & 0xFF);
+                                */
                                 log.debug("Frame size: {}", frameSize);
                                 if (frameSize > body.remaining()) {
                                     log.warn("Bad h264 frame...frameSize {} available: {}", frameSize, body.remaining());
                                     return null;
+                                } else if (frameSize == 1) {
+                                    // if its in avcc format, use remaining buffer
+                                    frameSize = body.remaining();
                                 }
                                 // get the nalu data
                                 byte[] data = new byte[frameSize];
