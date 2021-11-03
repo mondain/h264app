@@ -47,7 +47,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
         <red5-io.version>1.0.4-RELEASE</red5-io.version>
         <red5-server-common.version>1.0.4-RELEASE</red5-server-common.version>
-        <mina.version>2.0.8</mina.version>
+        <mina.version>2.1.5</mina.version>
         <slf4j.version>1.7.9</slf4j.version>
         <logback.version>1.1.2</logback.version>
         <mp4parser.version>1.9.34</mp4parser.version>
